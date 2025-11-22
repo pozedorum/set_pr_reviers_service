@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/labstack/echo/v4"
+	"github.com/gin-gonic/gin"
 	"github.com/oapi-codegen/runtime"
 )
 
@@ -15,145 +15,190 @@ import (
 type ServerInterface interface {
 	// Создать PR и автоматически назначить до 2 ревьюверов из команды автора
 	// (POST /pullRequest/create)
-	PostPullRequestCreate(ctx echo.Context) error
+	PostPullRequestCreate(c *gin.Context)
 	// Пометить PR как MERGED (идемпотентная операция)
 	// (POST /pullRequest/merge)
-	PostPullRequestMerge(ctx echo.Context) error
+	PostPullRequestMerge(c *gin.Context)
 	// Переназначить конкретного ревьювера на другого из его команды
 	// (POST /pullRequest/reassign)
-	PostPullRequestReassign(ctx echo.Context) error
+	PostPullRequestReassign(c *gin.Context)
 	// Создать команду с участниками (создаёт/обновляет пользователей)
 	// (POST /team/add)
-	PostTeamAdd(ctx echo.Context) error
+	PostTeamAdd(c *gin.Context)
 	// Получить команду с участниками
 	// (GET /team/get)
-	GetTeamGet(ctx echo.Context, params GetTeamGetParams) error
+	GetTeamGet(c *gin.Context, params GetTeamGetParams)
 	// Получить PR'ы, где пользователь назначен ревьювером
 	// (GET /users/getReview)
-	GetUsersGetReview(ctx echo.Context, params GetUsersGetReviewParams) error
+	GetUsersGetReview(c *gin.Context, params GetUsersGetReviewParams)
 	// Установить флаг активности пользователя
 	// (POST /users/setIsActive)
-	PostUsersSetIsActive(ctx echo.Context) error
+	PostUsersSetIsActive(c *gin.Context)
 }
 
-// ServerInterfaceWrapper converts echo contexts to parameters.
+// ServerInterfaceWrapper converts contexts to parameters.
 type ServerInterfaceWrapper struct {
-	Handler ServerInterface
+	Handler            ServerInterface
+	HandlerMiddlewares []MiddlewareFunc
+	ErrorHandler       func(*gin.Context, error, int)
 }
 
-// PostPullRequestCreate converts echo context to params.
-func (w *ServerInterfaceWrapper) PostPullRequestCreate(ctx echo.Context) error {
-	var err error
+type MiddlewareFunc func(c *gin.Context)
 
-	// Invoke the callback with all the unmarshaled arguments
-	err = w.Handler.PostPullRequestCreate(ctx)
-	return err
+// PostPullRequestCreate operation middleware
+func (siw *ServerInterfaceWrapper) PostPullRequestCreate(c *gin.Context) {
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.PostPullRequestCreate(c)
 }
 
-// PostPullRequestMerge converts echo context to params.
-func (w *ServerInterfaceWrapper) PostPullRequestMerge(ctx echo.Context) error {
-	var err error
+// PostPullRequestMerge operation middleware
+func (siw *ServerInterfaceWrapper) PostPullRequestMerge(c *gin.Context) {
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
 
-	// Invoke the callback with all the unmarshaled arguments
-	err = w.Handler.PostPullRequestMerge(ctx)
-	return err
+	siw.Handler.PostPullRequestMerge(c)
 }
 
-// PostPullRequestReassign converts echo context to params.
-func (w *ServerInterfaceWrapper) PostPullRequestReassign(ctx echo.Context) error {
-	var err error
+// PostPullRequestReassign operation middleware
+func (siw *ServerInterfaceWrapper) PostPullRequestReassign(c *gin.Context) {
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
 
-	// Invoke the callback with all the unmarshaled arguments
-	err = w.Handler.PostPullRequestReassign(ctx)
-	return err
+	siw.Handler.PostPullRequestReassign(c)
 }
 
-// PostTeamAdd converts echo context to params.
-func (w *ServerInterfaceWrapper) PostTeamAdd(ctx echo.Context) error {
-	var err error
+// PostTeamAdd operation middleware
+func (siw *ServerInterfaceWrapper) PostTeamAdd(c *gin.Context) {
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
 
-	// Invoke the callback with all the unmarshaled arguments
-	err = w.Handler.PostTeamAdd(ctx)
-	return err
+	siw.Handler.PostTeamAdd(c)
 }
 
-// GetTeamGet converts echo context to params.
-func (w *ServerInterfaceWrapper) GetTeamGet(ctx echo.Context) error {
+// GetTeamGet operation middleware
+func (siw *ServerInterfaceWrapper) GetTeamGet(c *gin.Context) {
 	var err error
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetTeamGetParams
+
 	// ------------- Required query parameter "team_name" -------------
 
-	err = runtime.BindQueryParameter("form", true, true, "team_name", ctx.QueryParams(), &params.TeamName)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter team_name: %s", err))
+	if paramValue := c.Query("team_name"); paramValue != "" {
+	} else {
+		siw.ErrorHandler(c, fmt.Errorf("Query argument team_name is required, but not found"), http.StatusBadRequest)
+		return
 	}
 
-	// Invoke the callback with all the unmarshaled arguments
-	err = w.Handler.GetTeamGet(ctx, params)
-	return err
+	err = runtime.BindQueryParameter("form", true, true, "team_name", c.Request.URL.Query(), &params.TeamName)
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter team_name: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetTeamGet(c, params)
 }
 
-// GetUsersGetReview converts echo context to params.
-func (w *ServerInterfaceWrapper) GetUsersGetReview(ctx echo.Context) error {
+// GetUsersGetReview operation middleware
+func (siw *ServerInterfaceWrapper) GetUsersGetReview(c *gin.Context) {
 	var err error
 
 	// Parameter object where we will unmarshal all parameters from the context
 	var params GetUsersGetReviewParams
+
 	// ------------- Required query parameter "user_id" -------------
 
-	err = runtime.BindQueryParameter("form", true, true, "user_id", ctx.QueryParams(), &params.UserId)
+	if paramValue := c.Query("user_id"); paramValue != "" {
+	} else {
+		siw.ErrorHandler(c, fmt.Errorf("Query argument user_id is required, but not found"), http.StatusBadRequest)
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "user_id", c.Request.URL.Query(), &params.UserId)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter user_id: %s", err))
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter user_id: %w", err), http.StatusBadRequest)
+		return
 	}
 
-	// Invoke the callback with all the unmarshaled arguments
-	err = w.Handler.GetUsersGetReview(ctx, params)
-	return err
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetUsersGetReview(c, params)
 }
 
-// PostUsersSetIsActive converts echo context to params.
-func (w *ServerInterfaceWrapper) PostUsersSetIsActive(ctx echo.Context) error {
-	var err error
+// PostUsersSetIsActive operation middleware
+func (siw *ServerInterfaceWrapper) PostUsersSetIsActive(c *gin.Context) {
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
 
-	// Invoke the callback with all the unmarshaled arguments
-	err = w.Handler.PostUsersSetIsActive(ctx)
-	return err
+	siw.Handler.PostUsersSetIsActive(c)
 }
 
-// This is a simple interface which specifies echo.Route addition functions which
-// are present on both echo.Echo and echo.Group, since we want to allow using
-// either of them for path registration
-type EchoRouter interface {
-	CONNECT(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route
-	DELETE(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route
-	GET(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route
-	HEAD(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route
-	OPTIONS(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route
-	PATCH(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route
-	POST(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route
-	PUT(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route
-	TRACE(path string, h echo.HandlerFunc, m ...echo.MiddlewareFunc) *echo.Route
+// GinServerOptions provides options for the Gin server.
+type GinServerOptions struct {
+	BaseURL      string
+	Middlewares  []MiddlewareFunc
+	ErrorHandler func(*gin.Context, error, int)
 }
 
-// RegisterHandlers adds each server route to the EchoRouter.
-func RegisterHandlers(router EchoRouter, si ServerInterface) {
-	RegisterHandlersWithBaseURL(router, si, "")
+// RegisterHandlers creates http.Handler with routing matching OpenAPI spec.
+func RegisterHandlers(router gin.IRouter, si ServerInterface) {
+	RegisterHandlersWithOptions(router, si, GinServerOptions{})
 }
 
-// Registers handlers, and prepends BaseURL to the paths, so that the paths
-// can be served under a prefix.
-func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL string) {
+// RegisterHandlersWithOptions creates http.Handler with additional options
+func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options GinServerOptions) {
+	errorHandler := options.ErrorHandler
+	if errorHandler == nil {
+		errorHandler = func(c *gin.Context, err error, statusCode int) {
+			c.JSON(statusCode, gin.H{"msg": err.Error()})
+		}
+	}
+
 	wrapper := ServerInterfaceWrapper{
-		Handler: si,
+		Handler:            si,
+		HandlerMiddlewares: options.Middlewares,
+		ErrorHandler:       errorHandler,
 	}
 
-	router.POST(baseURL+"/pullRequest/create", wrapper.PostPullRequestCreate)
-	router.POST(baseURL+"/pullRequest/merge", wrapper.PostPullRequestMerge)
-	router.POST(baseURL+"/pullRequest/reassign", wrapper.PostPullRequestReassign)
-	router.POST(baseURL+"/team/add", wrapper.PostTeamAdd)
-	router.GET(baseURL+"/team/get", wrapper.GetTeamGet)
-	router.GET(baseURL+"/users/getReview", wrapper.GetUsersGetReview)
-	router.POST(baseURL+"/users/setIsActive", wrapper.PostUsersSetIsActive)
+	router.POST(options.BaseURL+"/pullRequest/create", wrapper.PostPullRequestCreate)
+	router.POST(options.BaseURL+"/pullRequest/merge", wrapper.PostPullRequestMerge)
+	router.POST(options.BaseURL+"/pullRequest/reassign", wrapper.PostPullRequestReassign)
+	router.POST(options.BaseURL+"/team/add", wrapper.PostTeamAdd)
+	router.GET(options.BaseURL+"/team/get", wrapper.GetTeamGet)
+	router.GET(options.BaseURL+"/users/getReview", wrapper.GetUsersGetReview)
+	router.POST(options.BaseURL+"/users/setIsActive", wrapper.PostUsersSetIsActive)
 }

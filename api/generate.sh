@@ -2,7 +2,7 @@
 
 set -e
 
-echo "Generating Go code from OpenAPI spec..."
+echo "🔨 Generating Go code from OpenAPI spec..."
 
 # Создаем директорию если нет
 mkdir -p ../internal/generated
@@ -14,10 +14,10 @@ oapi-codegen \
     -package generated \
     openapi.yml > ../internal/generated/types.gen.go
 
-# Генерация Echo сервера
-echo "🚀 Generating Echo server..."
+# Генерация Gin сервера
+echo "🚀 Generating Gin server..."
 oapi-codegen \
-    -generate echo-server \
+    -generate gin \
     -package generated \
     openapi.yml > ../internal/generated/server.gen.go
 

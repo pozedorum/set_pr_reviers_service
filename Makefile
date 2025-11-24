@@ -21,9 +21,10 @@ clean_mocks:
 
 test:
 	go test ./internal/service/... -v
+	go test ./internal/repository/... -v
 
 generate: generate-mocks generate-api
-generate-mocks:
+generate_mocks:
 	@echo "Generating mocks..."
 	mockery --dir internal/interfaces --name Repository --output internal/mocks --outpkg mocks --filename mock_Repository.go --with-expecter
 	@echo "Mocks generated successfully!"

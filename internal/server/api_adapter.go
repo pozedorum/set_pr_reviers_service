@@ -6,10 +6,10 @@ import (
 )
 
 type APIAdapter struct {
-	server *PrServer
+	server *PRServer
 }
 
-func NewAPIAdapter(server *PrServer) generated.ServerInterface {
+func NewAPIAdapter(server *PRServer) generated.ServerInterface {
 	return &APIAdapter{server: server}
 }
 

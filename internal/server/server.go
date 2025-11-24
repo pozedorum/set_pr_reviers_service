@@ -8,17 +8,17 @@ import (
 	"github.com/pozedorum/set_pr_reviers_service/internal/interfaces"
 )
 
-type PrServer struct {
+type PRServer struct {
 	server *http.Server
 	router *gin.Engine
 	serv   interfaces.Service
 	logger interfaces.Logger
 }
 
-func NewPrServer(port string, service interfaces.Service, logger interfaces.Logger) *PrServer {
+func NewPRServer(port string, service interfaces.Service, logger interfaces.Logger) *PRServer {
 	router := gin.Default()
 
-	s := &PrServer{
+	s := &PRServer{
 		serv:   service,
 		logger: logger,
 		server: &http.Server{
@@ -32,7 +32,7 @@ func NewPrServer(port string, service interfaces.Service, logger interfaces.Logg
 	return s
 }
 
-func (s *PrServer) setupRoutes() {
+func (s *PRServer) setupRoutes() {
 	s.router.GET("/health", s.handleHealthCheck)
 
 	// Teams group
@@ -58,16 +58,16 @@ func (s *PrServer) setupRoutes() {
 	}
 }
 
-func (s *PrServer) Start() error {
+func (s *PRServer) Start() error {
 	s.logger.Info("SERVER_START", "Gin server starting", "addr", s.server.Addr)
 	return s.server.ListenAndServe()
 }
 
-func (s *PrServer) Shutdown(ctx context.Context) error {
+func (s *PRServer) Shutdown(ctx context.Context) error {
 	s.logger.Info("SERVER_SHUTDOWN", "Initiating server shutdown")
 	return s.server.Shutdown(ctx)
 }
 
-func (s *PrServer) handleHealthCheck(c *gin.Context) {
+func (s *PRServer) handleHealthCheck(c *gin.Context) {
 	c.JSON(200, gin.H{"status": "ok"})
 }

@@ -12,8 +12,6 @@ import (
 )
 
 func TestCreateTeam_Success(t *testing.T) {
-	// Arrange
-
 	mockRepo := &mocks.Repository{}
 	logger, err := logger.NewLogger("pr-service", "logger_for_tests")
 	assert.NoError(t, err)
@@ -34,16 +32,13 @@ func TestCreateTeam_Success(t *testing.T) {
 
 	service := NewPRServiceWithSeed(mockRepo, logger, 42)
 
-	// Act
 	err = service.CreateTeam(team)
 
-	// Assert
 	assert.NoError(t, err)
 	mockRepo.AssertExpectations(t)
 }
 
 func TestCreateTeam_AlreadyExists(t *testing.T) {
-	// Arrange
 	mockRepo := &mocks.Repository{}
 	logger, err := logger.NewLogger("pr-service", "logger_for_tests")
 	assert.NoError(t, err)
@@ -62,32 +57,26 @@ func TestCreateTeam_AlreadyExists(t *testing.T) {
 
 	service := NewPRService(mockRepo, logger)
 
-	// Act
 	err = service.CreateTeam(team)
 
-	// Assert
 	assert.Error(t, err)
 	assert.Equal(t, ErrTeamAlreadyExists, err)
 	mockRepo.AssertExpectations(t)
 }
 
 func TestCreateTeam_EmptyTeam(t *testing.T) {
-	// Arrange
 	mockRepo := &mocks.Repository{}
 	logger, err := logger.NewLogger("pr-service", "logger_for_tests")
 	assert.NoError(t, err)
 	service := NewPRService(mockRepo, logger)
 
-	// Act
 	err = service.CreateTeam(nil)
 
-	// Assert
 	assert.Error(t, err)
 	assert.Equal(t, ErrCreateEmptyTeam, err)
 }
 
 func TestCreatePR_Success(t *testing.T) {
-	// Arrange
 	mockRepo := &mocks.Repository{}
 	logger, err := logger.NewLogger("pr-service", "logger_for_tests")
 	assert.NoError(t, err)
@@ -115,10 +104,8 @@ func TestCreatePR_Success(t *testing.T) {
 
 	service := NewPRServiceWithSeed(mockRepo, logger, 42)
 
-	// Act
 	pr, err := service.CreatePR("pr-123", "Test PR", "author1")
 
-	// Assert
 	assert.NoError(t, err)
 	assert.NotNil(t, pr)
 	assert.Equal(t, "pr-123", pr.PullRequestID)
@@ -129,7 +116,6 @@ func TestCreatePR_Success(t *testing.T) {
 }
 
 func TestCreatePR_AuthorNotFound(t *testing.T) {
-	// Arrange
 	mockRepo := &mocks.Repository{}
 	logger, err := logger.NewLogger("pr-service", "logger_for_tests")
 	assert.NoError(t, err)
@@ -137,10 +123,8 @@ func TestCreatePR_AuthorNotFound(t *testing.T) {
 
 	service := NewPRService(mockRepo, logger)
 
-	// Act
 	pr, err := service.CreatePR("pr-123", "Test PR", "author1")
 
-	// Assert
 	assert.Error(t, err)
 	assert.Nil(t, pr)
 	assert.Contains(t, err.Error(), "author not found")
@@ -148,7 +132,6 @@ func TestCreatePR_AuthorNotFound(t *testing.T) {
 }
 
 func TestCreatePR_AlreadyExists(t *testing.T) {
-	// Arrange
 	mockRepo := &mocks.Repository{}
 	logger, err := logger.NewLogger("pr-service", "logger_for_tests")
 	assert.NoError(t, err)
@@ -168,10 +151,8 @@ func TestCreatePR_AlreadyExists(t *testing.T) {
 
 	service := NewPRService(mockRepo, logger)
 
-	// Act
 	pr, err := service.CreatePR("pr-123", "Test PR", "author1")
 
-	// Assert
 	assert.Error(t, err)
 	assert.Nil(t, pr)
 	assert.Equal(t, ErrPRAlreadyExists, err)
@@ -179,7 +160,6 @@ func TestCreatePR_AlreadyExists(t *testing.T) {
 }
 
 func TestMergePR_Success(t *testing.T) {
-	// Arrange
 	mockRepo := &mocks.Repository{}
 	logger, err := logger.NewLogger("pr-service", "logger_for_tests")
 	assert.NoError(t, err)
@@ -198,17 +178,14 @@ func TestMergePR_Success(t *testing.T) {
 
 	service := NewPRService(mockRepo, logger)
 
-	// Act
 	pr, err := service.MergePR("pr-123")
 
-	// Assert
 	assert.NoError(t, err)
 	assert.Equal(t, entity.PullRequestStatusMerged, pr.Status)
 	mockRepo.AssertExpectations(t)
 }
 
 func TestMergePR_AlreadyMerged(t *testing.T) {
-	// Arrange
 	mockRepo := &mocks.Repository{}
 	logger, err := logger.NewLogger("pr-service", "logger_for_tests")
 	assert.NoError(t, err)
@@ -224,17 +201,14 @@ func TestMergePR_AlreadyMerged(t *testing.T) {
 
 	service := NewPRService(mockRepo, logger)
 
-	// Act
 	pr, err := service.MergePR("pr-123")
 
-	// Assert
 	assert.NoError(t, err)
 	assert.Equal(t, entity.PullRequestStatusMerged, pr.Status)
 	mockRepo.AssertExpectations(t)
 }
 
 func TestMergePR_NotFound(t *testing.T) {
-	// Arrange
 	mockRepo := &mocks.Repository{}
 	logger, err := logger.NewLogger("pr-service", "logger_for_tests")
 	assert.NoError(t, err)
@@ -242,10 +216,8 @@ func TestMergePR_NotFound(t *testing.T) {
 
 	service := NewPRService(mockRepo, logger)
 
-	// Act
 	pr, err := service.MergePR("pr-123")
 
-	// Assert
 	assert.Error(t, err)
 	assert.Nil(t, pr)
 	assert.Contains(t, err.Error(), "find PR")
@@ -253,7 +225,6 @@ func TestMergePR_NotFound(t *testing.T) {
 }
 
 func TestReassignReviewer_Success(t *testing.T) {
-	// Arrange
 	mockRepo := &mocks.Repository{}
 	logger, err := logger.NewLogger("pr-service", "logger_for_tests")
 	assert.NoError(t, err)
@@ -288,10 +259,8 @@ func TestReassignReviewer_Success(t *testing.T) {
 
 	service := NewPRServiceWithSeed(mockRepo, logger, 42)
 
-	// Act
 	updatedPR, newReviewer, err := service.ReassignReviewer("pr-123", "user1")
 
-	// Assert
 	assert.NoError(t, err)
 	assert.NotEqual(t, "user1", newReviewer)
 	assert.True(t, contains([]string{"user3", "user4"}, newReviewer))
@@ -300,7 +269,6 @@ func TestReassignReviewer_Success(t *testing.T) {
 }
 
 func TestReassignReviewer_MergedPR(t *testing.T) {
-	// Arrange
 	mockRepo := &mocks.Repository{}
 	logger, err := logger.NewLogger("pr-service", "logger_for_tests")
 	assert.NoError(t, err)
@@ -316,10 +284,8 @@ func TestReassignReviewer_MergedPR(t *testing.T) {
 
 	service := NewPRService(mockRepo, logger)
 
-	// Act
 	updatedPR, newReviewer, err := service.ReassignReviewer("pr-123", "user1")
 
-	// Assert
 	assert.Error(t, err)
 	assert.Nil(t, updatedPR)
 	assert.Empty(t, newReviewer)
@@ -328,7 +294,6 @@ func TestReassignReviewer_MergedPR(t *testing.T) {
 }
 
 func TestReassignReviewer_ReviewerNotFound(t *testing.T) {
-	// Arrange
 	mockRepo := &mocks.Repository{}
 	logger, err := logger.NewLogger("pr-service", "logger_for_tests")
 	assert.NoError(t, err)
@@ -345,10 +310,8 @@ func TestReassignReviewer_ReviewerNotFound(t *testing.T) {
 
 	service := NewPRService(mockRepo, logger)
 
-	// Act
 	updatedPR, newReviewer, err := service.ReassignReviewer("pr-123", "user1")
 
-	// Assert
 	assert.Error(t, err)
 	assert.Nil(t, updatedPR)
 	assert.Empty(t, newReviewer)
@@ -357,7 +320,6 @@ func TestReassignReviewer_ReviewerNotFound(t *testing.T) {
 }
 
 func TestSetUserActive_Success(t *testing.T) {
-	// Arrange
 	mockRepo := &mocks.Repository{}
 	logger, err := logger.NewLogger("pr-service", "logger_for_tests")
 	assert.NoError(t, err)
@@ -373,17 +335,14 @@ func TestSetUserActive_Success(t *testing.T) {
 
 	service := NewPRService(mockRepo, logger)
 
-	// Act
 	updatedUser, err := service.SetUserActive("user1", true)
 
-	// Assert
 	assert.NoError(t, err)
 	assert.True(t, updatedUser.IsActive)
 	mockRepo.AssertExpectations(t)
 }
 
 func TestSetUserActive_AlreadyActive(t *testing.T) {
-	// Arrange
 	mockRepo := &mocks.Repository{}
 	logger, err := logger.NewLogger("pr-service", "logger_for_tests")
 	assert.NoError(t, err)
@@ -399,10 +358,8 @@ func TestSetUserActive_AlreadyActive(t *testing.T) {
 
 	service := NewPRService(mockRepo, logger)
 
-	// Act
 	updatedUser, err := service.SetUserActive("user1", true)
 
-	// Assert
 	assert.NoError(t, err)
 	assert.True(t, updatedUser.IsActive)
 	mockRepo.AssertExpectations(t)

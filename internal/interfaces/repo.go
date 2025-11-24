@@ -2,23 +2,23 @@ package interfaces
 
 import "github.com/pozedorum/set_pr_reviers_service/internal/entity"
 
-type UserRepository interface {
-	Create(user *entity.User) error
-	FindByID(userID string) (*entity.User, error)
-	Update(user *entity.User) error
-	FindByTeam(teamName string) ([]*entity.User, error)
+type Repository interface {
+	// Users
+	CreateUser(user *entity.User) error
+	FindUserByID(userID string) (*entity.User, error)
+	UpdateUser(user *entity.User) error
+	FindUsersByTeam(teamName string) ([]*entity.User, error)
 	SetActive(userID string, isActive bool) error
-}
 
-type TeamRepository interface {
-	Create(team *entity.Team) error
-	FindByName(teamName string) (*entity.Team, error)
-	Exists(teamName string) bool
-}
+	// Teams
+	CreateTeam(team *entity.Team) error
+	FindTeamByName(teamName string) (*entity.Team, error)
+	TeamExists(teamName string) bool
 
-type PRRepository interface {
-	Create(pr *entity.PullRequest) error
-	FindByID(prID string) (*entity.PullRequest, error)
-	Update(pr *entity.PullRequest) error
-	FindByReviewer(userID string) ([]*entity.PullRequest, error)
+	// PRs
+	CreatePR(pr *entity.PullRequest) error
+	FindPRByID(prID string) (*entity.PullRequest, error)
+	ClosePR(pr *entity.PullRequest) error
+	UpdatePR(pr *entity.PullRequest) error
+	FindPRsByReviewer(userID string) ([]*entity.PullRequest, error)
 }

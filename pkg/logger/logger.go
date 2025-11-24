@@ -4,15 +4,16 @@ package logger
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/rs/zerolog"
 )
 
 var (
-	LevelInfo  = true
+	LevelInfo  = false
 	LevelDebug = false
-	LevelWarn  = true
+	LevelWarn  = false
 	LevelError = true
 )
 
@@ -25,12 +26,16 @@ type Logger struct {
 }
 
 func NewLogger(serviceName, logFilePath string) (*Logger, error) {
-	if err := os.MkdirAll("./logs", 0o755); err != nil {
-		return nil, err
-	}
-
 	var output io.Writer
-	if logFilePath != "" {
+
+	if logFilePath == "logger_for_tests" {
+		output = io.Discard
+	} else if logFilePath != "" {
+		dir := filepath.Dir(logFilePath)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, err
+		}
+
 		file, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 		if err != nil {
 			return nil, err

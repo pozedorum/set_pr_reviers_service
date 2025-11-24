@@ -47,6 +47,7 @@ type MiddlewareFunc func(c *gin.Context)
 
 // PostPullRequestCreate operation middleware
 func (siw *ServerInterfaceWrapper) PostPullRequestCreate(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -59,6 +60,7 @@ func (siw *ServerInterfaceWrapper) PostPullRequestCreate(c *gin.Context) {
 
 // PostPullRequestMerge operation middleware
 func (siw *ServerInterfaceWrapper) PostPullRequestMerge(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -71,6 +73,7 @@ func (siw *ServerInterfaceWrapper) PostPullRequestMerge(c *gin.Context) {
 
 // PostPullRequestReassign operation middleware
 func (siw *ServerInterfaceWrapper) PostPullRequestReassign(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -83,6 +86,7 @@ func (siw *ServerInterfaceWrapper) PostPullRequestReassign(c *gin.Context) {
 
 // PostTeamAdd operation middleware
 func (siw *ServerInterfaceWrapper) PostTeamAdd(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {
@@ -95,6 +99,7 @@ func (siw *ServerInterfaceWrapper) PostTeamAdd(c *gin.Context) {
 
 // GetTeamGet operation middleware
 func (siw *ServerInterfaceWrapper) GetTeamGet(c *gin.Context) {
+
 	var err error
 
 	// Parameter object where we will unmarshal all parameters from the context
@@ -103,6 +108,7 @@ func (siw *ServerInterfaceWrapper) GetTeamGet(c *gin.Context) {
 	// ------------- Required query parameter "team_name" -------------
 
 	if paramValue := c.Query("team_name"); paramValue != "" {
+
 	} else {
 		siw.ErrorHandler(c, fmt.Errorf("Query argument team_name is required, but not found"), http.StatusBadRequest)
 		return
@@ -126,6 +132,7 @@ func (siw *ServerInterfaceWrapper) GetTeamGet(c *gin.Context) {
 
 // GetUsersGetReview operation middleware
 func (siw *ServerInterfaceWrapper) GetUsersGetReview(c *gin.Context) {
+
 	var err error
 
 	// Parameter object where we will unmarshal all parameters from the context
@@ -134,6 +141,7 @@ func (siw *ServerInterfaceWrapper) GetUsersGetReview(c *gin.Context) {
 	// ------------- Required query parameter "user_id" -------------
 
 	if paramValue := c.Query("user_id"); paramValue != "" {
+
 	} else {
 		siw.ErrorHandler(c, fmt.Errorf("Query argument user_id is required, but not found"), http.StatusBadRequest)
 		return
@@ -157,6 +165,7 @@ func (siw *ServerInterfaceWrapper) GetUsersGetReview(c *gin.Context) {
 
 // PostUsersSetIsActive operation middleware
 func (siw *ServerInterfaceWrapper) PostUsersSetIsActive(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 		if c.IsAborted() {

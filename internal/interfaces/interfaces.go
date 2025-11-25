@@ -23,7 +23,6 @@ type Repository interface {
 	// PRs
 	CreatePR(pr *entity.PullRequest) error
 	FindPRByID(prID string) (*entity.PullRequest, error)
-	ClosePR(pr *entity.PullRequest) error
 	UpdatePR(pr *entity.PullRequest) error
 	FindPRsByReviewer(userID string) ([]*entity.PullRequest, error)
 }
@@ -38,7 +37,7 @@ type Service interface {
 	GetUserReviews(userID string) ([]*entity.PullRequest, error)
 
 	// PRs
-	CreatePR(prID, prName, authorID string) (*entity.PullRequest, error)
+	CreatePR(pr *entity.PullRequest) error
 	MergePR(prID string) (*entity.PullRequest, error)
 	ReassignReviewer(prID, oldUserID string) (*entity.PullRequest, string, error)
 }

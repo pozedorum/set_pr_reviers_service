@@ -18,6 +18,7 @@ var (
 	ErrEmptyUserUsername = errors.New("empty team member username")
 
 	ErrNoPR            = errors.New("no such pull request")
+	ErrNilPR           = errors.New("empty pull request")
 	ErrEmptyPRID       = errors.New("empty pull request ID")
 	ErrEmptyPRName     = errors.New("empty pull request name")
 	ErrEmptyPRAuthorID = errors.New("empty author ID of pull request")

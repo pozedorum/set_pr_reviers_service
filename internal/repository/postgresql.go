@@ -3,12 +3,20 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 	"github.com/pozedorum/set_pr_reviers_service/internal/entity"
 	"github.com/pozedorum/set_pr_reviers_service/internal/interfaces"
+)
+
+var (
+	ErrNoTeam = errors.New("no such team")
+	ErrNoUser = errors.New("no such user")
+	ErrNoPR   = errors.New("no such pull request")
 )
 
 type PRRepository struct {
@@ -59,12 +67,23 @@ func (r *PRRepository) CreateUser(user *entity.User) error {
 		"team_name", user.TeamName,
 		"is_active", user.IsActive)
 
+	// Получаем team_id по team_name
+	teamID, err := r.getTeamIDByName(user.TeamName)
+	if err != nil {
+		r.logger.Error("POSTGRES_CREATE_USER", "Failed to get team ID",
+			"user_id", user.UserID,
+			"team_name", user.TeamName,
+			"error", err,
+			"duration_ms", time.Since(start).Milliseconds())
+		return fmt.Errorf("get team ID: %w", err)
+	}
+
 	query := `
-		INSERT INTO users (user_id, username, team_name, is_active)
+		INSERT INTO users (user_id, username, team_id, is_active)
 		VALUES ($1, $2, $3, $4)
 	`
 
-	_, err := r.db.Exec(query, user.UserID, user.Username, user.TeamName, user.IsActive)
+	_, err = r.db.Exec(query, user.UserID, user.Username, teamID, user.IsActive)
 	if err != nil {
 		r.logger.Error("POSTGRES_CREATE_USER", "Failed to create user",
 			"user_id", user.UserID,
@@ -86,9 +105,10 @@ func (r *PRRepository) FindUserByID(userID string) (*entity.User, error) {
 		"user_id", userID)
 
 	query := `
-		SELECT user_id, username, team_name, is_active
-		FROM users
-		WHERE user_id = $1
+		SELECT u.user_id, u.username, t.team_name, u.is_active
+		FROM users u
+		JOIN teams t ON u.team_id = t.team_id
+		WHERE u.user_id = $1
 	`
 
 	var user entity.User
@@ -127,13 +147,24 @@ func (r *PRRepository) UpdateUser(user *entity.User) error {
 		"team_name", user.TeamName,
 		"is_active", user.IsActive)
 
+	// Получаем team_id по team_name
+	teamID, err := r.getTeamIDByName(user.TeamName)
+	if err != nil {
+		r.logger.Error("POSTGRES_UPDATE_USER", "Failed to get team ID",
+			"user_id", user.UserID,
+			"team_name", user.TeamName,
+			"error", err,
+			"duration_ms", time.Since(start).Milliseconds())
+		return fmt.Errorf("get team ID: %w", err)
+	}
+
 	query := `
 		UPDATE users 
-		SET username = $1, team_name = $2, is_active = $3, updated_at = CURRENT_TIMESTAMP
+		SET username = $1, team_id = $2, is_active = $3, updated_at = CURRENT_TIMESTAMP
 		WHERE user_id = $4
 	`
 
-	result, err := r.db.Exec(query, user.Username, user.TeamName, user.IsActive, user.UserID)
+	result, err := r.db.Exec(query, user.Username, teamID, user.IsActive, user.UserID)
 	if err != nil {
 		r.logger.Error("POSTGRES_UPDATE_USER", "Failed to update user",
 			"user_id", user.UserID,
@@ -159,55 +190,43 @@ func (r *PRRepository) UpdateUser(user *entity.User) error {
 func (r *PRRepository) FindUsersByTeam(teamName string) ([]*entity.User, error) {
 	start := time.Now()
 
-	r.logger.Debug("POSTGRES_FIND_USERS_BY_TEAM", "Finding users by team",
-		"team_name", teamName)
+	r.logger.Debug("POSTGRES_FIND_USERS_BY_TEAM", "Finding users by team", "team_name", teamName)
+
+	// Получаем team_id
+	teamID, err := r.getTeamIDByName(teamName)
+	if err != nil {
+		return nil, fmt.Errorf("find users by team: %w", err)
+	}
 
 	query := `
-		SELECT user_id, username, team_name, is_active
+		SELECT user_id, username, is_active
 		FROM users
-		WHERE team_name = $1
+		WHERE team_id = $1
 		ORDER BY user_id
 	`
 
-	rows, err := r.db.Query(query, teamName)
+	rows, err := r.db.Query(query, teamID)
 	if err != nil {
-		r.logger.Error("POSTGRES_FIND_USERS_BY_TEAM", "Failed to query users by team",
-			"team_name", teamName,
-			"error", err,
-			"duration_ms", time.Since(start).Milliseconds())
-		return nil, fmt.Errorf("find users by team: %w", err)
+		return nil, fmt.Errorf("query users by team: %w", err)
 	}
 	defer rows.Close()
 
 	var users []*entity.User
 	for rows.Next() {
 		var user entity.User
-		if err := rows.Scan(
-			&user.UserID,
-			&user.Username,
-			&user.TeamName,
-			&user.IsActive,
-		); err != nil {
-			r.logger.Error("POSTGRES_FIND_USERS_BY_TEAM", "Failed to scan user row",
-				"team_name", teamName,
-				"error", err,
-				"duration_ms", time.Since(start).Milliseconds())
+		if err := rows.Scan(&user.UserID, &user.Username, &user.IsActive); err != nil {
 			return nil, fmt.Errorf("scan user row: %w", err)
 		}
+		user.TeamName = teamName // Заполняем team_name для API
 		users = append(users, &user)
 	}
 
 	if err := rows.Err(); err != nil {
-		r.logger.Error("POSTGRES_FIND_USERS_BY_TEAM", "Error iterating user rows",
-			"team_name", teamName,
-			"error", err,
-			"duration_ms", time.Since(start).Milliseconds())
 		return nil, fmt.Errorf("iterate user rows: %w", err)
 	}
 
 	r.logger.Debug("POSTGRES_FIND_USERS_BY_TEAM", "Users found successfully",
-		"team_name", teamName,
-		"users_count", len(users),
+		"team_name", teamName, "team_id", teamID, "users_count", len(users),
 		"duration_ms", time.Since(start).Milliseconds())
 	return users, nil
 }
@@ -244,7 +263,7 @@ func (r *PRRepository) SetActive(userID string, isActive bool) error {
 		r.logger.Warn("POSTGRES_SET_ACTIVE", "No user found to update active status",
 			"user_id", userID,
 			"duration_ms", time.Since(start).Milliseconds())
-		return sql.ErrNoRows // Возвращаем стандартную ошибку
+		return ErrNoUser
 	}
 
 	r.logger.Info("POSTGRES_SET_ACTIVE", "User active status updated successfully",
@@ -257,8 +276,6 @@ func (r *PRRepository) SetActive(userID string, isActive bool) error {
 // Teams
 
 func (r *PRRepository) CreateTeam(team *entity.Team) error {
-	start := time.Now()
-
 	r.logger.Debug("POSTGRES_CREATE_TEAM", "Creating team",
 		"team_name", team.TeamName,
 		"members_count", len(team.Members))
@@ -266,94 +283,68 @@ func (r *PRRepository) CreateTeam(team *entity.Team) error {
 	// Начинаем транзакцию
 	tx, err := r.db.Begin()
 	if err != nil {
-		r.logger.Error("POSTGRES_CREATE_TEAM", "Failed to begin transaction",
-			"team_name", team.TeamName,
-			"error", err,
-			"duration_ms", time.Since(start).Milliseconds())
 		return fmt.Errorf("begin transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	// Создаем команду
-	teamQuery := `INSERT INTO teams (team_name) VALUES ($1)`
-	if _, err := tx.Exec(teamQuery, team.TeamName); err != nil {
+	// Создаем команду и получаем team_id
+	var teamID int
+	teamQuery := `INSERT INTO teams (team_name) VALUES ($1) RETURNING team_id`
+	err = tx.QueryRow(teamQuery, team.TeamName).Scan(&teamID)
+	if err != nil {
 		r.logger.Error("POSTGRES_CREATE_TEAM", "Failed to create team",
-			"team_name", team.TeamName,
-			"error", err,
-			"duration_ms", time.Since(start).Milliseconds())
+			"team_name", team.TeamName, "error", err)
 		return fmt.Errorf("create team: %w", err)
 	}
-
 	// Создаем пользователей
 	userQuery := `
-		INSERT INTO users (user_id, username, team_name, is_active)
+		INSERT INTO users (user_id, username, team_id, is_active)
 		VALUES ($1, $2, $3, $4)
 	`
 	for _, member := range team.Members {
-		if _, err := tx.Exec(userQuery, member.UserID, member.Username, team.TeamName, member.IsActive); err != nil {
+		_, err := tx.Exec(userQuery, member.UserID, member.Username, teamID, member.IsActive)
+		if err != nil {
 			r.logger.Error("POSTGRES_CREATE_TEAM", "Failed to create team member",
-				"team_name", team.TeamName,
-				"user_id", member.UserID,
-				"error", err,
-				"duration_ms", time.Since(start).Milliseconds())
+				"team_name", team.TeamName, "user_id", member.UserID, "error", err)
 			return fmt.Errorf("create team member %s: %w", member.UserID, err)
 		}
 	}
 
-	// Коммитим транзакцию
 	if err := tx.Commit(); err != nil {
 		r.logger.Error("POSTGRES_CREATE_TEAM", "Failed to commit transaction",
-			"team_name", team.TeamName,
-			"error", err,
-			"duration_ms", time.Since(start).Milliseconds())
+			"team_name", team.TeamName, "error", err)
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	r.logger.Info("POSTGRES_CREATE_TEAM", "Team created successfully",
-		"team_name", team.TeamName,
-		"members_count", len(team.Members),
-		"duration_ms", time.Since(start).Milliseconds())
+		"team_name", team.TeamName, "team_id", teamID)
 	return nil
 }
 
 func (r *PRRepository) FindTeamByName(teamName string) (*entity.Team, error) {
-	start := time.Now()
+	r.logger.Debug("POSTGRES_FIND_TEAM_BY_NAME", "Finding team by name", "team_name", teamName)
 
-	r.logger.Debug("POSTGRES_FIND_TEAM_BY_NAME", "Finding team by name",
-		"team_name", teamName)
-
-	// Получаем основную информацию о команде
-	teamQuery := `SELECT team_name FROM teams WHERE team_name = $1`
-	var team entity.Team
-	err := r.db.QueryRow(teamQuery, teamName).Scan(&team.TeamName)
+	// Получаем team_id по team_name
+	var teamID int
+	teamQuery := `SELECT team_id FROM teams WHERE team_name = $1`
+	err := r.db.QueryRow(teamQuery, teamName).Scan(&teamID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			r.logger.Debug("POSTGRES_FIND_TEAM_BY_NAME", "Team not found",
-				"team_name", teamName,
-				"duration_ms", time.Since(start).Milliseconds())
 			return nil, ErrNoTeam
 		}
-		r.logger.Error("POSTGRES_FIND_TEAM_BY_NAME", "Failed to find team",
-			"team_name", teamName,
-			"error", err,
-			"duration_ms", time.Since(start).Milliseconds())
 		return nil, fmt.Errorf("find team by name: %w", err)
 	}
 
-	// Получаем участников команды
+	// Получаем участников команды по team_id
 	membersQuery := `
 		SELECT user_id, username, is_active
 		FROM users
-		WHERE team_name = $1
+		WHERE team_id = $1
 		ORDER BY user_id
 	`
 
-	rows, err := r.db.Query(membersQuery, teamName)
+	rows, err := r.db.Query(membersQuery, teamID)
 	if err != nil {
-		r.logger.Error("POSTGRES_FIND_TEAM_BY_NAME", "Failed to query team members",
-			"team_name", teamName,
-			"error", err,
-			"duration_ms", time.Since(start).Milliseconds())
 		return nil, fmt.Errorf("query team members: %w", err)
 	}
 	defer rows.Close()
@@ -362,37 +353,27 @@ func (r *PRRepository) FindTeamByName(teamName string) (*entity.Team, error) {
 	for rows.Next() {
 		var member entity.TeamMember
 		if err := rows.Scan(&member.UserID, &member.Username, &member.IsActive); err != nil {
-			r.logger.Error("POSTGRES_FIND_TEAM_BY_NAME", "Failed to scan team member row",
-				"team_name", teamName,
-				"error", err,
-				"duration_ms", time.Since(start).Milliseconds())
 			return nil, fmt.Errorf("scan team member row: %w", err)
 		}
 		members = append(members, member)
 	}
 
 	if err := rows.Err(); err != nil {
-		r.logger.Error("POSTGRES_FIND_TEAM_BY_NAME", "Error iterating team member rows",
-			"team_name", teamName,
-			"error", err,
-			"duration_ms", time.Since(start).Milliseconds())
 		return nil, fmt.Errorf("iterate team member rows: %w", err)
 	}
 
-	team.Members = members
+	team := &entity.Team{
+		TeamName: teamName, // Возвращаем только team_name, teamID скрыт
+		Members:  members,
+	}
 
 	r.logger.Debug("POSTGRES_FIND_TEAM_BY_NAME", "Team found successfully",
-		"team_name", teamName,
-		"members_count", len(members),
-		"duration_ms", time.Since(start).Milliseconds())
-	return &team, nil
+		"team_name", teamName, "team_id", teamID, "members_count", len(members))
+	return team, nil
 }
 
 func (r *PRRepository) TeamExists(teamName string) bool {
-	start := time.Now()
-
-	r.logger.Debug("POSTGRES_TEAM_EXISTS", "Checking if team exists",
-		"team_name", teamName)
+	r.logger.Debug("POSTGRES_TEAM_EXISTS", "Checking if team exists", "team_name", teamName)
 
 	query := `SELECT 1 FROM teams WHERE team_name = $1`
 	var exists bool
@@ -400,18 +381,14 @@ func (r *PRRepository) TeamExists(teamName string) bool {
 
 	if err != nil && err != sql.ErrNoRows {
 		r.logger.Error("POSTGRES_TEAM_EXISTS", "Failed to check team existence",
-			"team_name", teamName,
-			"error", err,
-			"duration_ms", time.Since(start).Milliseconds())
+			"team_name", teamName, "error", err)
 		return false
 	}
 
 	exists = err == nil
 
 	r.logger.Debug("POSTGRES_TEAM_EXISTS", "Team existence check completed",
-		"team_name", teamName,
-		"exists", exists,
-		"duration_ms", time.Since(start).Milliseconds())
+		"team_name", teamName, "exists", exists)
 	return exists
 }
 
@@ -439,23 +416,15 @@ func (r *PRRepository) CreatePR(pr *entity.PullRequest) error {
 
 	// Создаем PR
 	prQuery := `
-		INSERT INTO pull_requests (pull_request_id, pull_request_name, author_id, status, created_at)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO pull_requests (pull_request_id, pull_request_name, author_id, status)
+		VALUES ($1, $2, $3, $4)
 	`
-
-	var createdAt time.Time
-	if pr.CreatedAt != nil {
-		createdAt = *pr.CreatedAt
-	} else {
-		createdAt = time.Now()
-	}
 
 	_, err = tx.Exec(prQuery,
 		pr.PullRequestID,
 		pr.PullRequestName,
 		pr.AuthorID,
 		string(pr.Status),
-		createdAt,
 	)
 	if err != nil {
 		r.logger.Error("POSTGRES_CREATE_PR", "Failed to create pull request",
@@ -540,7 +509,7 @@ func (r *PRRepository) FindPRByID(prID string) (*entity.PullRequest, error) {
 
 	pr.Status = entity.PullRequestStatus(status)
 	if mergedAt.Valid {
-		pr.MergedAt = &mergedAt.Time
+		pr.MergedAt = mergedAt.Time
 	}
 
 	// Получаем ревьюверов
@@ -591,48 +560,6 @@ func (r *PRRepository) FindPRByID(prID string) (*entity.PullRequest, error) {
 	return &pr, nil
 }
 
-func (r *PRRepository) ClosePR(pr *entity.PullRequest) error {
-	start := time.Now()
-
-	r.logger.Debug("POSTGRES_CLOSE_PR", "Closing pull request",
-		"pr_id", pr.PullRequestID)
-
-	query := `
-		UPDATE pull_requests 
-		SET status = $1, merged_at = $2
-		WHERE pull_request_id = $3
-	`
-
-	var mergedAt interface{}
-	if pr.MergedAt != nil {
-		mergedAt = *pr.MergedAt
-	} else {
-		mergedAt = nil
-	}
-
-	result, err := r.db.Exec(query, string(entity.PullRequestStatusMerged), mergedAt, pr.PullRequestID)
-	if err != nil {
-		r.logger.Error("POSTGRES_CLOSE_PR", "Failed to close pull request",
-			"pr_id", pr.PullRequestID,
-			"error", err,
-			"duration_ms", time.Since(start).Milliseconds())
-		return fmt.Errorf("close PR: %w", err)
-	}
-
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		r.logger.Warn("POSTGRES_CLOSE_PR", "No pull request found to close",
-			"pr_id", pr.PullRequestID,
-			"duration_ms", time.Since(start).Milliseconds())
-		return ErrNoPR
-	}
-
-	r.logger.Info("POSTGRES_CLOSE_PR", "Pull request closed successfully",
-		"pr_id", pr.PullRequestID,
-		"duration_ms", time.Since(start).Milliseconds())
-	return nil
-}
-
 func (r *PRRepository) UpdatePR(pr *entity.PullRequest) error {
 	start := time.Now()
 
@@ -659,14 +586,7 @@ func (r *PRRepository) UpdatePR(pr *entity.PullRequest) error {
 		WHERE pull_request_id = $4
 	`
 
-	var mergedAt interface{}
-	if pr.MergedAt != nil {
-		mergedAt = *pr.MergedAt
-	} else {
-		mergedAt = nil
-	}
-
-	result, err := tx.Exec(prQuery, pr.PullRequestName, string(pr.Status), mergedAt, pr.PullRequestID)
+	result, err := tx.Exec(prQuery, pr.PullRequestName, string(pr.Status), pr.MergedAt, pr.PullRequestID)
 	if err != nil {
 		r.logger.Error("POSTGRES_UPDATE_PR", "Failed to update pull request",
 			"pr_id", pr.PullRequestID,
@@ -731,18 +651,42 @@ func (r *PRRepository) FindPRsByReviewer(userID string) ([]*entity.PullRequest, 
 	r.logger.Debug("POSTGRES_FIND_PRS_BY_REVIEWER", "Finding PRs by reviewer",
 		"user_id", userID)
 
+	// ОДИН запрос вместо N+1
 	query := `
+		WITH prs_with_reviewers AS (
+			SELECT 
+				pr.pull_request_id, 
+				pr.pull_request_name, 
+				pr.author_id, 
+				pr.status, 
+				pr.created_at, 
+				pr.merged_at,
+				ARRAY_AGG(prr.reviewer_id) as reviewer_ids
+			FROM pull_requests pr
+			INNER JOIN pull_request_reviewers prr ON pr.pull_request_id = prr.pull_request_id
+			WHERE pr.pull_request_id IN (
+				SELECT DISTINCT pull_request_id 
+				FROM pull_request_reviewers 
+				WHERE reviewer_id = $1
+			)
+			GROUP BY 
+				pr.pull_request_id, 
+				pr.pull_request_name, 
+				pr.author_id, 
+				pr.status, 
+				pr.created_at, 
+				pr.merged_at
+		)
 		SELECT 
-			pr.pull_request_id, 
-			pr.pull_request_name, 
-			pr.author_id, 
-			pr.status, 
-			pr.created_at, 
-			pr.merged_at
-		FROM pull_requests pr
-		INNER JOIN pull_request_reviewers prr ON pr.pull_request_id = prr.pull_request_id
-		WHERE prr.reviewer_id = $1
-		ORDER BY pr.created_at DESC
+			pull_request_id, 
+			pull_request_name, 
+			author_id, 
+			status, 
+			created_at, 
+			merged_at,
+			reviewer_ids
+		FROM prs_with_reviewers
+		ORDER BY created_at DESC
 	`
 
 	rows, err := r.db.Query(query, userID)
@@ -760,6 +704,7 @@ func (r *PRRepository) FindPRsByReviewer(userID string) ([]*entity.PullRequest, 
 		var pr entity.PullRequest
 		var status string
 		var mergedAt sql.NullTime
+		var reviewerIDs []string
 
 		if err := rows.Scan(
 			&pr.PullRequestID,
@@ -768,6 +713,7 @@ func (r *PRRepository) FindPRsByReviewer(userID string) ([]*entity.PullRequest, 
 			&status,
 			&pr.CreatedAt,
 			&mergedAt,
+			pq.Array(&reviewerIDs), // Нужно импортировать github.com/lib/pq
 		); err != nil {
 			r.logger.Error("POSTGRES_FIND_PRS_BY_REVIEWER", "Failed to scan PR row",
 				"user_id", userID,
@@ -778,40 +724,10 @@ func (r *PRRepository) FindPRsByReviewer(userID string) ([]*entity.PullRequest, 
 
 		pr.Status = entity.PullRequestStatus(status)
 		if mergedAt.Valid {
-			pr.MergedAt = &mergedAt.Time
+			pr.MergedAt = mergedAt.Time
 		}
+		pr.AssignedReviewers = reviewerIDs
 
-		// Получаем ревьюверов для каждого PR
-		reviewersQuery := `
-			SELECT reviewer_id
-			FROM pull_request_reviewers
-			WHERE pull_request_id = $1
-		`
-		reviewerRows, err := r.db.Query(reviewersQuery, pr.PullRequestID)
-		if err != nil {
-			r.logger.Error("POSTGRES_FIND_PRS_BY_REVIEWER", "Failed to query reviewers for PR",
-				"pr_id", pr.PullRequestID,
-				"error", err,
-				"duration_ms", time.Since(start).Milliseconds())
-			return nil, fmt.Errorf("query reviewers for PR %s: %w", pr.PullRequestID, err)
-		}
-
-		var reviewers []string
-		for reviewerRows.Next() {
-			var reviewerID string
-			if err := reviewerRows.Scan(&reviewerID); err != nil {
-				reviewerRows.Close()
-				r.logger.Error("POSTGRES_FIND_PRS_BY_REVIEWER", "Failed to scan reviewer for PR",
-					"pr_id", pr.PullRequestID,
-					"error", err,
-					"duration_ms", time.Since(start).Milliseconds())
-				return nil, fmt.Errorf("scan reviewer for PR %s: %w", pr.PullRequestID, err)
-			}
-			reviewers = append(reviewers, reviewerID)
-		}
-		reviewerRows.Close()
-
-		pr.AssignedReviewers = reviewers
 		prs = append(prs, &pr)
 	}
 
@@ -828,4 +744,17 @@ func (r *PRRepository) FindPRsByReviewer(userID string) ([]*entity.PullRequest, 
 		"prs_count", len(prs),
 		"duration_ms", time.Since(start).Milliseconds())
 	return prs, nil
+}
+
+func (r *PRRepository) getTeamIDByName(teamName string) (int, error) {
+	var teamID int
+	query := `SELECT team_id FROM teams WHERE team_name = $1`
+	err := r.db.QueryRow(query, teamName).Scan(&teamID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, ErrNoTeam
+		}
+		return 0, fmt.Errorf("get team ID by name: %w", err)
+	}
+	return teamID, nil
 }

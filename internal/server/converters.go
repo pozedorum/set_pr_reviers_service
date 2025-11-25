@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/gin-gonic/gin"
 	"github.com/pozedorum/set_pr_reviers_service/internal/entity"
 	"github.com/pozedorum/set_pr_reviers_service/internal/generated"
 )
@@ -29,8 +30,8 @@ func generatedPRToEntity(gPR generated.PullRequest) entity.PullRequest {
 		AuthorID:          gPR.AuthorId,
 		Status:            entity.PullRequestStatus(gPR.Status),
 		AssignedReviewers: gPR.AssignedReviewers,
-		CreatedAt:         gPR.CreatedAt,
-		MergedAt:          gPR.MergedAt,
+		CreatedAt:         *gPR.CreatedAt,
+		MergedAt:          *gPR.MergedAt,
 	}
 }
 
@@ -76,8 +77,8 @@ func entityPRToGenerated(ePR entity.PullRequest) generated.PullRequest {
 		AuthorId:          ePR.AuthorID,
 		Status:            generated.PullRequestStatus(ePR.Status),
 		AssignedReviewers: ePR.AssignedReviewers,
-		CreatedAt:         ePR.CreatedAt,
-		MergedAt:          ePR.MergedAt,
+		CreatedAt:         &ePR.CreatedAt,
+		MergedAt:          &ePR.MergedAt,
 	}
 }
 
@@ -88,4 +89,19 @@ func entityPRToShortGenerated(ePR entity.PullRequest) generated.PullRequestShort
 		AuthorId:        ePR.AuthorID,
 		Status:          generated.PullRequestShortStatus(ePR.Status),
 	}
+}
+
+// Вспомогательные функции для извлечения параметров из контекста
+func getTeamNameFromContext(c *gin.Context) string {
+	if teamName, exists := c.Get("team_name"); exists {
+		return teamName.(string)
+	}
+	return ""
+}
+
+func getUserIDFromContext(c *gin.Context) string {
+	if userID, exists := c.Get("user_id"); exists {
+		return userID.(string)
+	}
+	return ""
 }

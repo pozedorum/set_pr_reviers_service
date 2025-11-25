@@ -196,84 +196,80 @@ func (servs *PrService) GetUserReviews(userID string) ([]*entity.PullRequest, er
 	return prs, nil
 }
 
-func (servs *PrService) CreatePR(prID, prName, authorID string) (*entity.PullRequest, error) {
+func (servs *PrService) CreatePR(pr *entity.PullRequest) error {
 	start := time.Now()
 
-	servs.logger.Debug("SERVICE_CREATE_PR", "Starting PR creation",
-		"pr_id", prID,
-		"pr_name", prName,
-		"author_id", authorID)
-
-	if err := checkPRCorrectness(prID, prName, authorID); err != nil {
+	if err := checkPRCorrectness(pr); err != nil {
 		servs.logger.Warn("SERVICE_CREATE_PR", "PR data validation failed",
-			"pr_id", prID,
-			"pr_name", prName,
-			"author_id", authorID,
+			"pr_id", pr.PullRequestID,
+			"pr_name", pr.PullRequestName,
+			"author_id", pr.AuthorID,
 			"error", err,
 			"duration_ms", time.Since(start).Milliseconds())
-		return nil, err
+		return err
 	}
 
+	servs.logger.Debug("SERVICE_CREATE_PR", "Starting PR creation",
+		"pr_id", pr.PullRequestID,
+		"pr_name", pr.PullRequestName,
+		"author_id", pr.AuthorID)
+
 	// Проверяем что автор существует
-	author, err := servs.repo.FindUserByID(authorID)
+	author, err := servs.repo.FindUserByID(pr.AuthorID)
 	if err != nil {
 		servs.logger.Error("SERVICE_CREATE_PR", "Author not found",
-			"author_id", authorID,
+			"author_id", pr.AuthorID,
 			"error", err,
 			"duration_ms", time.Since(start).Milliseconds())
-		return nil, fmt.Errorf("author not found: %w", err)
+		return fmt.Errorf("author not found: %w", err)
 	}
 
 	// Проверяем что PR не существует
-	if _, err = servs.repo.FindPRByID(prID); err == nil {
+	if existingPR, err := servs.repo.FindPRByID(pr.PullRequestID); err == nil && existingPR != nil {
 		servs.logger.Warn("SERVICE_CREATE_PR", "PR already exists",
-			"pr_id", prID,
+			"pr_id", pr.PullRequestID,
 			"duration_ms", time.Since(start).Milliseconds())
-		return nil, ErrPRAlreadyExists
+		return ErrPRAlreadyExists
 	}
 
 	// Назначаем ревьюверов
-	candidates, err := servs.findReviewCandidates(author.TeamName, authorID)
+	candidates, err := servs.findReviewCandidates(author.TeamName, pr.AuthorID)
 	if err != nil {
 		servs.logger.Error("SERVICE_CREATE_PR", "Failed to find review candidates",
 			"team_name", author.TeamName,
-			"author_id", authorID,
+			"author_id", pr.AuthorID,
 			"error", err,
 			"duration_ms", time.Since(start).Milliseconds())
-		return nil, fmt.Errorf("find review candidates: %w", err)
+		return fmt.Errorf("find review candidates: %w", err)
 	}
 
 	reviewers := servs.selectReviewers(candidates, 2)
 
 	servs.logger.Debug("SERVICE_CREATE_PR", "Reviewers selected",
-		"pr_id", prID,
+		"pr_id", pr.PullRequestID,
 		"candidates_count", len(candidates),
 		"reviewers_selected", reviewers)
 
-	pr := entity.PullRequest{
-		PullRequestID:     prID,
-		PullRequestName:   prName,
-		AuthorID:          authorID,
-		Status:            entity.PullRequestStatusOpen,
-		AssignedReviewers: reviewers,
-	}
+	pr.Status = entity.PullRequestStatusOpen
+	pr.AssignedReviewers = reviewers
+	pr.CreatedAt = time.Now() // Добавляем timestamp
 
-	if err := servs.repo.CreatePR(&pr); err != nil {
+	if err := servs.repo.CreatePR(pr); err != nil {
 		servs.logger.Error("SERVICE_CREATE_PR", "Failed to create PR in repository",
-			"pr_id", prID,
+			"pr_id", pr.PullRequestID,
 			"error", err,
 			"duration_ms", time.Since(start).Milliseconds())
-		return nil, err
+		return err
 	}
 
 	servs.logger.Info("SERVICE_CREATE_PR", "PR created successfully",
-		"pr_id", prID,
-		"pr_name", prName,
-		"author_id", authorID,
+		"pr_id", pr.PullRequestID,
+		"pr_name", pr.PullRequestName,
+		"author_id", pr.AuthorID,
 		"reviewers_count", len(reviewers),
 		"team_name", author.TeamName,
 		"duration_ms", time.Since(start).Milliseconds())
-	return &pr, nil
+	return nil
 }
 
 func (servs *PrService) MergePR(prID string) (*entity.PullRequest, error) {
@@ -305,6 +301,7 @@ func (servs *PrService) MergePR(prID string) (*entity.PullRequest, error) {
 	}
 
 	pr.Status = entity.PullRequestStatusMerged
+	pr.MergedAt = start
 	if err := servs.repo.UpdatePR(pr); err != nil {
 		servs.logger.Error("SERVICE_MERGE_PR", "Failed to update PR status in repository",
 			"pr_id", prID,
@@ -358,50 +355,68 @@ func (servs *PrService) ReassignReviewer(prID, oldUserID string) (*entity.PullRe
 		return nil, "", ErrCannotReassingOnMergedPR
 	}
 
-	user, err := servs.repo.FindUserByID(oldUserID)
+	// Проверяем что старый ревьювер существует и получаем его команду
+	oldUser, err := servs.repo.FindUserByID(oldUserID)
 	if err != nil {
-		servs.logger.Error("SERVICE_REASSIGN_REVIEWER", "Failed to find user",
+		servs.logger.Error("SERVICE_REASSIGN_REVIEWER", "Failed to find old user",
 			"old_user_id", oldUserID,
 			"error", err,
 			"duration_ms", time.Since(start).Milliseconds())
-		return nil, "", fmt.Errorf("find user: %w", err)
+		return nil, "", fmt.Errorf("find old user: %w", err)
 	}
 
-	candidates, err := servs.findReviewCandidates(user.TeamName, pr.AuthorID, oldUserID)
-	if err != nil {
-		servs.logger.Error("SERVICE_REASSIGN_REVIEWER", "Failed to find replacement candidates",
-			"team_name", user.TeamName,
-			"author_id", pr.AuthorID,
-			"old_user_id", oldUserID,
-			"error", err,
-			"duration_ms", time.Since(start).Milliseconds())
-		return nil, "", fmt.Errorf("find replacement candidates: %w", err)
-	}
-
-	newReviewer := servs.selectReviewers(candidates, 1)
-	if len(newReviewer) == 0 {
-		servs.logger.Warn("SERVICE_REASSIGN_REVIEWER", "No replacement candidates available",
-			"team_name", user.TeamName,
-			"candidates_count", len(candidates),
-			"duration_ms", time.Since(start).Milliseconds())
-		return nil, "", ErrNoReplacementCandidate
-	}
-
-	found := false
-	for i, reviewer := range pr.AssignedReviewers {
-		if reviewer == oldUserID {
-			pr.AssignedReviewers[i] = newReviewer[0]
-			found = true
-			break
-		}
-	}
-	if !found {
+	// Проверяем что старый ревьювер действительно назначен на этот PR
+	if !servs.containsReviewer(pr.AssignedReviewers, oldUserID) {
 		servs.logger.Warn("SERVICE_REASSIGN_REVIEWER", "Reviewer not assigned to this PR",
 			"pr_id", prID,
 			"old_user_id", oldUserID,
 			"assigned_reviewers", pr.AssignedReviewers,
 			"duration_ms", time.Since(start).Milliseconds())
 		return nil, "", fmt.Errorf("reviewer %s not assigned to this PR", oldUserID)
+	}
+
+	// Ищем кандидатов для замены из команды старого ревьювера
+	excludeUsers := []string{pr.AuthorID}
+	excludeUsers = append(excludeUsers, pr.AssignedReviewers...) // исключаем уже назначенных
+	var flag bool = false
+	for _, usersId := range excludeUsers {
+		if usersId == oldUserID {
+			flag = true
+			break
+		}
+	}
+	if !flag {
+		excludeUsers = append(excludeUsers, oldUserID)
+	}
+
+	candidates, err := servs.findReviewCandidates(oldUser.TeamName, excludeUsers...)
+	if err != nil {
+		servs.logger.Error("SERVICE_REASSIGN_REVIEWER", "Failed to find replacement candidates",
+			"team_name", oldUser.TeamName,
+			"excluded_users", excludeUsers,
+			"error", err,
+			"duration_ms", time.Since(start).Milliseconds())
+		return nil, "", fmt.Errorf("find replacement candidates: %w", err)
+	}
+
+	// Выбираем одного случайного кандидата
+	newReviewers := servs.selectReviewers(candidates, 1)
+	if len(newReviewers) == 0 {
+		servs.logger.Warn("SERVICE_REASSIGN_REVIEWER", "No replacement candidates available",
+			"team_name", oldUser.TeamName,
+			"candidates_count", len(candidates),
+			"duration_ms", time.Since(start).Milliseconds())
+		return nil, "", ErrNoReplacementCandidate
+	}
+
+	newReviewerID := newReviewers[0]
+
+	// Заменяем ревьювера в списке
+	for i, reviewer := range pr.AssignedReviewers {
+		if reviewer == oldUserID {
+			pr.AssignedReviewers[i] = newReviewerID
+			break
+		}
 	}
 
 	// Сохраняем изменения
@@ -416,10 +431,20 @@ func (servs *PrService) ReassignReviewer(prID, oldUserID string) (*entity.PullRe
 	servs.logger.Info("SERVICE_REASSIGN_REVIEWER", "Reviewer reassigned successfully",
 		"pr_id", prID,
 		"old_user_id", oldUserID,
-		"new_user_id", newReviewer[0],
-		"team_name", user.TeamName,
+		"new_user_id", newReviewerID,
+		"team_name", oldUser.TeamName,
 		"duration_ms", time.Since(start).Milliseconds())
-	return pr, newReviewer[0], nil
+	return pr, newReviewerID, nil
+}
+
+// Вспомогательная функция для проверки наличия ревьювера
+func (servs *PrService) containsReviewer(reviewers []string, userID string) bool {
+	for _, reviewer := range reviewers {
+		if reviewer == userID {
+			return true
+		}
+	}
+	return false
 }
 
 // Вспомогательные функции (остаются без логирования)
@@ -448,13 +473,15 @@ func checkTeamMemberCorrectness(member entity.TeamMember) error {
 	return nil
 }
 
-func checkPRCorrectness(prID, prName, authorID string) error {
+func checkPRCorrectness(pr *entity.PullRequest) error {
 	switch {
-	case prID == "":
+	case pr == nil:
+		return ErrNilPR
+	case pr.PullRequestID == "":
 		return ErrEmptyPRID
-	case prName == "":
+	case pr.PullRequestName == "":
 		return ErrEmptyPRName
-	case authorID == "":
+	case pr.AuthorID == "":
 		return ErrEmptyPRAuthorID
 	}
 	return nil

@@ -95,18 +95,19 @@ func TestMain(m *testing.M) {
 func initTestSchema(db *sql.DB) error {
 	_, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS teams (
-			team_name VARCHAR(255) PRIMARY KEY,
+			team_id SERIAL PRIMARY KEY,
+			team_name VARCHAR(255) UNIQUE NOT NULL,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
 
 		CREATE TABLE IF NOT EXISTS users (
 			user_id VARCHAR(255) PRIMARY KEY,
 			username VARCHAR(255) NOT NULL,
-			team_name VARCHAR(255) NOT NULL,
+			team_id INTEGER NOT NULL,
 			is_active BOOLEAN DEFAULT TRUE,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			FOREIGN KEY (team_name) REFERENCES teams(team_name) ON DELETE CASCADE
+			FOREIGN KEY (team_id) REFERENCES teams(team_id) ON DELETE CASCADE
 		);
 
 		CREATE TABLE IF NOT EXISTS pull_requests (
@@ -127,6 +128,14 @@ func initTestSchema(db *sql.DB) error {
 			FOREIGN KEY (pull_request_id) REFERENCES pull_requests(pull_request_id) ON DELETE CASCADE,
 			FOREIGN KEY (reviewer_id) REFERENCES users(user_id) ON DELETE CASCADE
 		);
+
+		-- Индексы для производительности
+		CREATE INDEX IF NOT EXISTS idx_users_team_id ON users(team_id);
+		CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active);
+		CREATE INDEX IF NOT EXISTS idx_prs_status ON pull_requests(status);
+		CREATE INDEX IF NOT EXISTS idx_prs_author_id ON pull_requests(author_id);
+		CREATE INDEX IF NOT EXISTS idx_pr_reviewers_reviewer_id ON pull_request_reviewers(reviewer_id);
+		CREATE INDEX IF NOT EXISTS idx_teams_name ON teams(team_name);
 	`)
 	return err
 }
@@ -401,7 +410,7 @@ func TestCreatePR_Success(t *testing.T) {
 		AuthorID:          "author1",
 		Status:            entity.PullRequestStatusOpen,
 		AssignedReviewers: []string{"reviewer1", "reviewer2"},
-		CreatedAt:         &[]time.Time{time.Now()}[0],
+		CreatedAt:         []time.Time{time.Now()}[0],
 	}
 
 	err := testRepo.CreatePR(pr)
@@ -449,7 +458,7 @@ func TestUpdatePR_Success(t *testing.T) {
 		AuthorID:          "author1",
 		Status:            entity.PullRequestStatusMerged,
 		AssignedReviewers: []string{"reviewer1", "reviewer2"},
-		MergedAt:          &[]time.Time{time.Now()}[0],
+		MergedAt:          []time.Time{time.Now()}[0],
 	}
 
 	err = testRepo.UpdatePR(updatedPR)
@@ -464,36 +473,7 @@ func TestUpdatePR_Success(t *testing.T) {
 	assert.NotNil(t, foundPR.MergedAt)
 }
 
-func TestClosePR_Success(t *testing.T) {
-	defer cleanupTestData()
-	setupTestTeamAndUsers()
-
-	// Создаем PR
-	pr := &entity.PullRequest{
-		PullRequestID:     "pr-123",
-		PullRequestName:   "Test PR",
-		AuthorID:          "author1",
-		Status:            entity.PullRequestStatusOpen,
-		AssignedReviewers: []string{"reviewer1"},
-	}
-	err := testRepo.CreatePR(pr)
-	require.NoError(t, err)
-
-	// Закрываем PR
-	mergedAt := time.Now()
-	prToClose := &entity.PullRequest{
-		PullRequestID: "pr-123",
-		MergedAt:      &mergedAt,
-	}
-	err = testRepo.ClosePR(prToClose)
-	require.NoError(t, err)
-
-	// Проверяем закрытие
-	closedPR, err := testRepo.FindPRByID("pr-123")
-	require.NoError(t, err)
-	assert.Equal(t, entity.PullRequestStatusMerged, closedPR.Status)
-	assert.NotNil(t, closedPR.MergedAt)
-}
+// УДАЛЕН: TestClosePR_Success - используем UpdatePR вместо ClosePR
 
 func TestFindPRsByReviewer_Success(t *testing.T) {
 	defer cleanupTestData()
@@ -574,7 +554,6 @@ func TestCreateTeam_TransactionRollbackOnDuplicateUser(t *testing.T) {
 	require.NoError(t, err)
 
 	// Пытаемся создать другую команду с тем же пользователем (дубликат user_id)
-	// Это должно вызвать ошибку уникальности и откатить всю транзакцию
 	team2 := &entity.Team{
 		TeamName: "frontend",
 		Members: []entity.TeamMember{
@@ -594,6 +573,17 @@ func TestCreateTeam_TransactionRollbackOnDuplicateUser(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "backend", backendTeam.TeamName)
 	assert.Len(t, backendTeam.Members, 1)
+
+	// Проверяем что пользователь остался в первой команде
+	var userTeamName string
+	err = testDB.QueryRow(`
+		SELECT t.team_name 
+		FROM users u 
+		JOIN teams t ON u.team_id = t.team_id 
+		WHERE u.user_id = $1
+	`, "user1").Scan(&userTeamName)
+	require.NoError(t, err)
+	assert.Equal(t, "backend", userTeamName)
 }
 
 func TestCreatePR_TransactionRollbackOnInvalidReviewer(t *testing.T) {
@@ -706,7 +696,13 @@ func TestCreateTeam_TransactionCommitSuccess(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, teamCount)
 
-	err = testDB.QueryRow("SELECT COUNT(*) FROM users WHERE team_name = $1", "backend").Scan(&userCount)
+	// ИСПРАВЛЕННЫЙ ЗАПРОС: используем JOIN для подсчета пользователей по team_name
+	err = testDB.QueryRow(`
+		SELECT COUNT(*) 
+		FROM users u 
+		JOIN teams t ON u.team_id = t.team_id 
+		WHERE t.team_name = $1
+	`, "backend").Scan(&userCount)
 	require.NoError(t, err)
 	assert.Equal(t, 2, userCount)
 }
@@ -769,5 +765,6 @@ func TestSetActive_UserNotExists(t *testing.T) {
 
 	err := testRepo.SetActive("nonexistent_user", true)
 	assert.Error(t, err)
-	assert.Equal(t, sql.ErrNoRows, err)
+	// Исправлено: проверяем на нашу кастомную ошибку, а не sql.ErrNoRows
+	assert.ErrorIs(t, err, ErrNoUser)
 }

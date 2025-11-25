@@ -1,0 +1,16 @@
+{"level":"error","service":"pr-service","operation":"REASSIGN_REVIEWER_ERROR","error":{},"pr_id":"pr-001","old_reviewer":"user3","time":"2025-11-25T18:31:31Z","message":"Failed to reassign reviewer"}
+{"level":"error","service":"pr-service","operation":"CREATE_TEAM_ERROR","error":{},"team_name":"backend","time":"2025-11-25T18:32:39Z","message":"Failed to create team"}
+{"level":"error","service":"pr-service","operation":"CREATE_PR_ERROR","error":{},"pr_id":"pr-001","author_id":"user1","time":"2025-11-25T18:32:48Z","message":"Failed to create PR"}
+{"level":"error","service":"pr-service","operation":"REASSIGN_REVIEWER_ERROR","error":{},"pr_id":"pr-001","old_reviewer":"user2","time":"2025-11-25T18:32:57Z","message":"Failed to reassign reviewer"}
+{"level":"error","service":"pr-service","operation":"SERVICE_GET_TEAM","team_name":"nonexistent","error":{},"duration_ms":0,"time":"2025-11-25T18:33:10Z","message":"Failed to find team"}
+{"level":"error","service":"pr-service","operation":"GET_TEAM_ERROR","error":{},"team_name":"nonexistent","time":"2025-11-25T18:33:10Z","message":"Failed to get team"}
+{"level":"error","service":"pr-service","operation":"SERVICE_GET_TEAM","team_name":"backend","error":{},"duration_ms":5,"time":"2025-11-25T18:40:01Z","message":"Failed to find team"}
+{"level":"error","service":"pr-service","operation":"GET_TEAM_ERROR","error":{},"team_name":"backend","time":"2025-11-25T18:40:01Z","message":"Failed to get team"}
+{"level":"error","service":"pr-service","operation":"REASSIGN_REVIEWER_ERROR","error":{},"pr_id":"pr-frontend-001","old_reviewer":"fe2","time":"2025-11-25T18:40:30Z","message":"Failed to reassign reviewer"}
+{"level":"error","service":"pr-service","operation":"CREATE_TEAM_ERROR","error":{},"team_name":"frontend","time":"2025-11-25T19:47:12Z","message":"Failed to create team"}
+{"level":"error","service":"pr-service","operation":"CREATE_PR_ERROR","error":{},"pr_id":"pr-frontend-001","author_id":"fe1","time":"2025-11-25T19:47:12Z","message":"Failed to create PR"}
+{"level":"error","service":"pr-service","operation":"SERVICE_GET_USER_REVIEWS","user_id":"null","error":{},"duration_ms":0,"time":"2025-11-25T19:47:12Z","message":"Failed to find user"}
+{"level":"error","service":"pr-service","operation":"GET_USER_REVIEWS_ERROR","error":{},"user_id":"null","time":"2025-11-25T19:47:12Z","message":"Failed to get user reviews"}
+{"level":"error","service":"pr-service","operation":"REASSIGN_REVIEWER_ERROR","error":{},"pr_id":"pr-frontend-001","old_reviewer":"null","time":"2025-11-25T19:47:12Z","message":"Failed to reassign reviewer"}
+{"level":"error","service":"pr-service","operation":"CREATE_TEAM_ERROR","error":{},"team_name":"test-team","time":"2025-11-25T19:47:23Z","message":"Failed to create team"}
+{"level":"error","service":"pr-service","operation":"CREATE_PR_ERROR","error":{},"pr_id":"test-pr-001","author_id":"test1","time":"2025-11-25T19:47:23Z","message":"Failed to create PR"}

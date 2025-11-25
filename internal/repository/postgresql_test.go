@@ -141,10 +141,18 @@ func initTestSchema(db *sql.DB) error {
 }
 
 func cleanupTestData() {
-	testDB.Exec("DELETE FROM pull_request_reviewers")
-	testDB.Exec("DELETE FROM pull_requests")
-	testDB.Exec("DELETE FROM users")
-	testDB.Exec("DELETE FROM teams")
+	if _, err := testDB.Exec("DELETE FROM pull_request_reviewers"); err != nil {
+		panic("failed to cleanupTestData 1")
+	}
+	if _, err := testDB.Exec("DELETE FROM pull_requests"); err != nil {
+		panic("failed to cleanupTestData 2")
+	}
+	if _, err := testDB.Exec("DELETE FROM users"); err != nil {
+		panic("failed to cleanupTestData 3")
+	}
+	if _, err := testDB.Exec("DELETE FROM teams"); err != nil {
+		panic("failed to cleanupTestData 4")
+	}
 }
 
 func TestCreateTeam_Success(t *testing.T) {
@@ -397,7 +405,9 @@ func setupTestTeamAndUsers() {
 			{UserID: "reviewer3", Username: "Reviewer3", IsActive: false},
 		},
 	}
-	testRepo.CreateTeam(team)
+	if err := testRepo.CreateTeam(team); err != nil {
+		panic("failed to setupTestTeamAndUsers")
+	}
 }
 
 func TestCreatePR_Success(t *testing.T) {

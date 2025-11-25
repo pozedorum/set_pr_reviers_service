@@ -13,7 +13,7 @@ import (
 var (
 	LevelInfo  = false
 	LevelDebug = false
-	LevelWarn  = false
+	LevelWarn  = true
 	LevelError = true
 )
 

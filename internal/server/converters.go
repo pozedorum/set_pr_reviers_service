@@ -22,26 +22,26 @@ func generatedTeamToEntity(gTeam generated.Team) entity.Team {
 	}
 }
 
-func generatedPRToEntity(gPR generated.PullRequest) entity.PullRequest {
-	return entity.PullRequest{
-		PullRequestID:     gPR.PullRequestId,
-		PullRequestName:   gPR.PullRequestName,
-		AuthorID:          gPR.AuthorId,
-		Status:            entity.PullRequestStatus(gPR.Status),
-		AssignedReviewers: gPR.AssignedReviewers,
-		CreatedAt:         *gPR.CreatedAt,
-		MergedAt:          *gPR.MergedAt,
-	}
-}
+// func generatedPRToEntity(gPR generated.PullRequest) entity.PullRequest {
+// 	return entity.PullRequest{
+// 		PullRequestID:     gPR.PullRequestId,
+// 		PullRequestName:   gPR.PullRequestName,
+// 		AuthorID:          gPR.AuthorId,
+// 		Status:            entity.PullRequestStatus(gPR.Status),
+// 		AssignedReviewers: gPR.AssignedReviewers,
+// 		CreatedAt:         *gPR.CreatedAt,
+// 		MergedAt:          *gPR.MergedAt,
+// 	}
+// }
 
-func generatedUserToEntity(gUser generated.User) entity.User {
-	return entity.User{
-		UserID:   gUser.UserId,
-		Username: gUser.Username,
-		TeamName: gUser.TeamName,
-		IsActive: gUser.IsActive,
-	}
-}
+// func generatedUserToEntity(gUser generated.User) entity.User {
+// 	return entity.User{
+// 		UserID:   gUser.UserId,
+// 		Username: gUser.Username,
+// 		TeamName: gUser.TeamName,
+// 		IsActive: gUser.IsActive,
+// 	}
+// }
 
 // Перевод из entity в openapi
 func entityTeamToGenerated(eTeam entity.Team) generated.Team {

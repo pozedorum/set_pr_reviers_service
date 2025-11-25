@@ -378,7 +378,7 @@ func (servs *PrService) ReassignReviewer(prID, oldUserID string) (*entity.PullRe
 	// Ищем кандидатов для замены из команды старого ревьювера
 	excludeUsers := []string{pr.AuthorID}
 	excludeUsers = append(excludeUsers, pr.AssignedReviewers...) // исключаем уже назначенных
-	var flag bool = false
+	flag := false
 	for _, usersId := range excludeUsers {
 		if usersId == oldUserID {
 			flag = true

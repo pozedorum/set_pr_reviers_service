@@ -3,8 +3,10 @@ package server
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pozedorum/set_pr_reviers_service/internal/generated"
 	"github.com/pozedorum/set_pr_reviers_service/internal/interfaces"
 )
 
@@ -33,29 +35,33 @@ func NewPRServer(port string, service interfaces.Service, logger interfaces.Logg
 }
 
 func (s *PRServer) setupRoutes() {
+	// Логирование запросов
+	s.router.Use(s.loggingMiddleware())
+
 	s.router.GET("/health", s.handleHealthCheck)
 
-	// Teams group
-	teams := s.router.Group("/team")
-	{
-		teams.POST("/add", s.handleCreateTeam) // POST /team/add
-		teams.GET("/get", s.handleGetTeam)     // GET /team/get
-	}
+	apiAdapter := NewAPIAdapter(s)
+	generated.RegisterHandlers(s.router, apiAdapter)
 
-	// Users group
-	users := s.router.Group("/users")
-	{
-		users.POST("/setIsActive", s.handleSetUserActive) // POST /users/setIsActive
-		users.GET("/getReview", s.handleGetUserReviews)   // GET /users/getReview
-	}
-
-	// Pull Requests group
-	prs := s.router.Group("/pullRequest")
-	{
-		prs.POST("/create", s.handleCreatePR)           // POST /pullRequest/create
-		prs.POST("/merge", s.handleMergePR)             // POST /pullRequest/merge
-		prs.POST("/reassign", s.handleReassignReviewer) // POST /pullRequest/reassign
-	}
+	// // Teams group
+	// teams := s.router.Group("/team")
+	// {
+	// 	teams.POST("/add", s.handleCreateTeam) // POST /team/add
+	// 	teams.GET("/get", s.handleGetTeam)     // GET /team/get
+	// }
+	// // Users group
+	// users := s.router.Group("/users")
+	// {
+	// 	users.POST("/setIsActive", s.handleSetUserActive) // POST /users/setIsActive
+	// 	users.GET("/getReview", s.handleGetUserReviews)   // GET /users/getReview
+	// }
+	// // Pull Requests group
+	// prs := s.router.Group("/pullRequest")
+	// {
+	// 	prs.POST("/create", s.handleCreatePR)           // POST /pullRequest/create
+	// 	prs.POST("/merge", s.handleMergePR)             // POST /pullRequest/merge
+	// 	prs.POST("/reassign", s.handleReassignReviewer) // POST /pullRequest/reassign
+	// }
 }
 
 func (s *PRServer) Start() error {
@@ -70,4 +76,21 @@ func (s *PRServer) Shutdown(ctx context.Context) error {
 
 func (s *PRServer) handleHealthCheck(c *gin.Context) {
 	c.JSON(200, gin.H{"status": "ok"})
+}
+
+func (s *PRServer) loggingMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+
+		c.Next()
+
+		duration := time.Since(start)
+		s.logger.Info("HTTP_REQUEST", "Request completed",
+			"method", c.Request.Method,
+			"path", c.Request.URL.Path,
+			"status", c.Writer.Status(),
+			"duration_ms", duration.Milliseconds(),
+			"client_ip", c.ClientIP(),
+		)
+	}
 }

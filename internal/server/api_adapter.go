@@ -18,7 +18,7 @@ func (a *APIAdapter) PostTeamAdd(c *gin.Context) {
 }
 
 func (a *APIAdapter) GetTeamGet(c *gin.Context, params generated.GetTeamGetParams) {
-	// Поместить params внутрь c
+	c.Set("team_name", params.TeamName)
 	a.server.handleGetTeam(c)
 }
 
@@ -27,6 +27,7 @@ func (a *APIAdapter) PostUsersSetIsActive(c *gin.Context) {
 }
 
 func (a *APIAdapter) GetUsersGetReview(c *gin.Context, params generated.GetUsersGetReviewParams) {
+	c.Set("user_id", params.UserId)
 	a.server.handleGetUserReviews(c)
 }
 

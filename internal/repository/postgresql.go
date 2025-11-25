@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/lib/pq"
-	_ "github.com/lib/pq"
 	"github.com/pozedorum/set_pr_reviers_service/internal/entity"
 	"github.com/pozedorum/set_pr_reviers_service/internal/interfaces"
 )
@@ -713,7 +712,7 @@ func (r *PRRepository) FindPRsByReviewer(userID string) ([]*entity.PullRequest, 
 			&status,
 			&pr.CreatedAt,
 			&mergedAt,
-			pq.Array(&reviewerIDs), // Нужно импортировать github.com/lib/pq
+			pq.Array(&reviewerIDs),
 		); err != nil {
 			r.logger.Error("POSTGRES_FIND_PRS_BY_REVIEWER", "Failed to scan PR row",
 				"user_id", userID,
